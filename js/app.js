@@ -1,0 +1,240 @@
+const audio = (() => {
+    let instance = null;
+
+    let createOrGet = () => {
+        if (!(instance instanceof HTMLAudioElement)) {
+            instance = new Audio();
+            instance.autoplay = true;
+            instance.src = document.getElementById('tombol-musik').getAttribute('data-url');
+            instance.load();
+            instance.currentTime = 0;
+            instance.volume = 1;
+            instance.muted = false;
+            instance.loop = true;
+        }
+
+        return instance;
+    }
+
+    return {
+        play: () => createOrGet().play(),
+        pause: () => createOrGet().pause(),
+    };
+})();
+
+// OK
+const escapeHtml = (unsafe) => {
+    return unsafe
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+};
+
+// OK
+const timer = () => {
+    let countDownDate = (new Date(document.getElementById('tampilan-waktu').getAttribute('data-waktu').replace(' ', 'T'))).getTime();
+    let time = null;
+
+    time = setInterval(() => {
+        let distance = countDownDate - (new Date()).getTime();
+
+        if (distance < 0) {
+            clearInterval(time);
+            time = null;
+            return;
+        }
+
+        document.getElementById('hari').innerText = Math.floor(distance / (1000 * 60 * 60 * 24));
+        document.getElementById('jam').innerText = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        document.getElementById('menit').innerText = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+        document.getElementById('detik').innerText = Math.floor((distance % (1000 * 60)) / 1000);
+    }, 1000);
+};
+
+// OK
+const animation = () => {
+    const duration = 10 * 1000;
+    const animationEnd = Date.now() + duration;
+    let skew = 1;
+
+    let randomInRange = (min, max) => {
+        return Math.random() * (max - min) + min;
+    }
+
+    (function frame() {
+        const timeLeft = animationEnd - Date.now();
+        const ticks = Math.max(200, 500 * (timeLeft / duration));
+
+        skew = Math.max(0.8, skew - 0.001);
+
+        confetti({
+            particleCount: 1,
+            startVelocity: 0,
+            ticks: ticks,
+            origin: {
+                x: Math.random(),
+                y: Math.random() * skew - 0.2,
+            },
+            colors: ["FFC0CB", "FF69B4", "FF1493", "C71585"],
+            shapes: ["heart"],
+            gravity: randomInRange(0.5, 1),
+            scalar: randomInRange(1, 2),
+            drift: randomInRange(-0.5, 0.5),
+        });
+
+        if (timeLeft > 0) {
+            requestAnimationFrame(frame);
+        }
+    })();
+};
+
+// OK
+const buka =  () => {
+    // document.getElementById('daftar-ucapan').innerHTML = comment.renderLoading(pagination.getPer());
+    document.querySelector('body').style.overflowY = 'scroll';
+
+    opacity('welcome');
+    document.getElementById('tombol-musik').style.display = 'block';
+    AOS.init();
+    audio.play();
+
+    // animation();
+
+    timer();
+};
+
+// OK
+const play = (btn) => {
+    if (btn.getAttribute('data-status') !== 'true') {
+        btn.setAttribute('data-status', 'true');
+        audio.play();
+        btn.innerHTML = '<i class="fa-solid fa-circle-pause"></i>';
+    } else {
+        btn.setAttribute('data-status', 'false');
+        audio.pause();
+        btn.innerHTML = '<i class="fa-solid fa-circle-play"></i>';
+    }
+};
+
+// OK
+const modalFoto = (img) => {
+    document.getElementById('showModalFoto').src = img.src;
+    (new bootstrap.Modal('#modalFoto')).show();
+};
+
+// OK
+const tamu = () => {
+    let name = (new URLSearchParams(window.location.search)).get('to') ?? '';
+
+    if (name.length == 0) {
+        document.getElementById('nama-tamu').remove();
+        return;
+    }
+
+    let div = document.createElement('div');
+    div.classList.add('m-2');
+    div.innerHTML = `<p class="mt-0 mb-1 mx-0 p-0 text-light">Kepada Yth Bapak/Ibu/Saudara/i</p><h2 class="text-light">${escapeHtml(name)}</h2>`;
+
+    document.getElementById('form-nama').value = escapeHtml(name);
+    document.getElementById('nama-tamu').appendChild(div);
+};
+
+// OK
+const login = async () => {
+    let body = document.querySelector('body');
+
+    await request('POST', '/api/session')
+        .body({
+            email: body.getAttribute('data-email'),
+            password: body.getAttribute('data-password')
+        })
+        .then((res) => {
+            if (res.code == 200) {
+                localStorage.removeItem('token');
+                localStorage.setItem('token', res.data.token);
+                comment.ucapan();
+            }
+        })
+        .catch((err) => {
+            alert(`Terdapat kesalahan: ${err}`);
+            window.location.reload();
+            return;
+        });
+};
+
+// OK
+const like = async (button) => {
+    let token = localStorage.getItem('token') ?? '';
+    let id = button.getAttribute('data-uuid');
+
+    if (token.length == 0) {
+        alert('Terdapat kesalahan, token kosong !');
+        window.location.reload();
+        return;
+    }
+
+    let heart = button.firstElementChild.lastElementChild;
+    let info = button.firstElementChild.firstElementChild;
+
+    button.disabled = true;
+    info.innerText = 'Loading..';
+
+    if (likes.has(id)) {
+        await request('PATCH', '/api/comment/' + likes.get(id))
+            .token(token)
+            .then((res) => {
+                if (res.data.status) {
+                    likes.unset(id);
+
+                    heart.classList.remove('fa-solid', 'text-danger');
+                    heart.classList.add('fa-regular');
+
+                    info.setAttribute('data-suka', (parseInt(info.getAttribute('data-suka')) - 1).toString())
+                    info.innerText = info.getAttribute('data-suka') + ' suka';
+                }
+            })
+            .catch((err) => {
+                alert(`Terdapat kesalahan: ${err}`);
+            });
+
+    } else {
+        await request('POST', '/api/comment/' + id)
+            .token(token)
+            .then((res) => {
+                if (res.code == 201) {
+                    likes.set(id, res.data.uuid);
+
+                    heart.classList.remove('fa-regular');
+                    heart.classList.add('fa-solid', 'text-danger');
+
+                    info.setAttribute('data-suka', (parseInt(info.getAttribute('data-suka')) + 1).toString())
+                    info.innerText = info.getAttribute('data-suka') + ' suka';
+                }
+            })
+            .catch((err) => {
+                alert(`Terdapat kesalahan: ${err}`);
+            });
+    }
+
+    button.disabled = false;
+};
+
+// OK
+const opacity = (nama) => {
+    let op = parseInt(document.getElementById(nama).style.opacity);
+    let clear = null;
+
+    clear = setInterval(() => {
+        if (op >= 0) {
+            op -= 0.025;
+            document.getElementById(nama).style.opacity = op;
+        } else {
+            clearInterval(clear);
+            clear = null;
+            document.getElementById(nama).remove();
+            return;
+        }
+    }, 10);
+};
